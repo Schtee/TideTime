@@ -33,7 +33,7 @@ CRGB leds[NUM_LEDS];
 #define OCEAN 31, 78, 255
 #define CYAN 0, 200, 255
 #define YELLOW 255, 220, 80
-#define SAND 255, 60, 0
+#define SAND 255, 40, 0
 
 // Define colors at specific positions (0-255)
 DEFINE_GRADIENT_PALETTE(pal_gp) {
@@ -195,11 +195,12 @@ void updateLEDs() {
   auto progress = timeFromPrevious / (float)duration;
   auto eased = (1.0f - cos(PI * progress)) / 2.0f;
   //float sea_fill = previous.type == 1 ? eased : 1.0f - eased;
-  fill += 0.1;
-  if (fill > 1.0f)
-    fill = 0.0f;
 
   float sea_fill = fill;
+
+  fill += 0.01;
+  if (fill > 1.0f)
+    fill = 0.0f;
 
 
   Serial.println(sea_fill);
@@ -212,7 +213,7 @@ void updateLEDs() {
   const int numBlendLEDs = NUM_LEDS / 10.0f;
 
   for (int i = 0; i < NUM_LEDS; ++i) {
-    int cIndex = 0;
+    /*int cIndex = 0;
 
     if (i >= firstSandIndex) {
       int distanceIntoSand = i - firstSandIndex;
@@ -223,7 +224,8 @@ void updateLEDs() {
     Serial.print("Pal index: ");
     Serial.println(cIndex);
 
-    leds[i] = ColorFromPalette(palette, cIndex);
+    leds[i] = ColorFromPalette(palette, cIndex);*/
+    leds[i] = i >= firstSandIndex ? CRGB(SAND) : CRGB(OCEAN);
     Serial.printf("%i: %i %i %i", i, leds[i].r, leds[i].g, leds[i].b);
     Serial.println();
     
@@ -261,5 +263,6 @@ void loop() {
   }
   
   updateLEDs();  
-  delay(10000);
+  //delay(10000);
+  delay(1000);
 }
