@@ -27,6 +27,24 @@ WiFiMulti wifiMulti;
 WiFiUDP wifiUdp;
 NTP ntp(wifiUdp);
 
+#define NUM_LEDS 48
+CRGB leds[NUM_LEDS];
+
+#define OCEAN 31, 78, 255
+#define CYAN 0, 200, 255
+#define YELLOW 255, 220, 80
+#define SAND 255, 60, 0
+
+// Define colors at specific positions (0-255)
+DEFINE_GRADIENT_PALETTE(pal_gp) {
+    0,      OCEAN,
+    85,     CYAN,
+    170,    YELLOW,
+    255,    SAND
+};
+
+CRGBPalette16 palette = pal_gp;
+
 /*
 const char* ca = \
 "-----BEGIN CERTIFICATE-----\n" \
@@ -156,6 +174,73 @@ void setup() {
   ntp.ruleDST("BST", Last, Sun, Mar, 1, 60);
   ntp.ruleSTD("GMT", Last, Sun, Oct, 2, 0);
   ntp.begin(); 
+
+  FastLED.addLeds<WS2812, 2, GRB>(leds, NUM_LEDS);
+  FastLED.setBrightness(255);
+}
+
+float fill = 0.0f;
+
+void updateLEDs() {
+  
+  if (!currentTideEvents.has_value())
+    return;
+
+  auto previous = currentTideEvents.value().first;
+  auto next = currentTideEvents.value().second;
+  auto now = ntp.epoch() * 1000;
+  auto timeFromPrevious = now - previous.time.time_since_epoch().count();
+  auto duration = next.time.time_since_epoch().count() - previous.time.time_since_epoch().count();
+
+  auto progress = timeFromPrevious / (float)duration;
+  auto eased = (1.0f - cos(PI * progress)) / 2.0f;
+  //float sea_fill = previous.type == 1 ? eased : 1.0f - eased;
+  fill += 0.1;
+  if (fill > 1.0f)
+    fill = 0.0f;
+
+  float sea_fill = fill;
+
+
+  Serial.println(sea_fill);
+
+  Serial.println(ntp.epoch());
+  Serial.println(ntp.formattedTime("%d. %B %Y")); // dd. Mmm yyyy
+  Serial.println(ntp.formattedTime("%A %T")); // Www hh:mm:ss
+  
+  int firstSandIndex = sea_fill * NUM_LEDS;
+  const int numBlendLEDs = NUM_LEDS / 10.0f;
+
+  for (int i = 0; i < NUM_LEDS; ++i) {
+    int cIndex = 0;
+
+    if (i >= firstSandIndex) {
+      int distanceIntoSand = i - firstSandIndex;
+      //cIndex = (distanceIntoSand > numBlendLEDs ? 1.0f : distanceIntoSand / (float)numBlendLEDs) * 255;
+      cIndex = (distanceIntoSand > numBlendLEDs ? 1.0f : distanceIntoSand / (float)numBlendLEDs) * 239;
+    }
+
+    Serial.print("Pal index: ");
+    Serial.println(cIndex);
+
+    leds[i] = ColorFromPalette(palette, cIndex);
+    Serial.printf("%i: %i %i %i", i, leds[i].r, leds[i].g, leds[i].b);
+    Serial.println();
+    
+    /*float x = i / (float)NUM_LEDS;
+    if (i < firstSandIndex) {
+      leds[i] = CRGB(OCEAN);
+    }
+    else {
+      int distanceIntoSand = i - firstSandIndex;
+      int cIndex = (distanceIntoSand / (float)NUM_LEDS) * 0xff;
+      Serial.print("Pal index: ");
+      Serial.println(cIndex);
+      leds[i] = ColorFromPalette(palette, cIndex);
+    }*/
+  }
+  
+  FastLED.show();
 }
 
 bool calculatedTideTime = false;
@@ -168,25 +253,13 @@ void loop() {
       Serial.println(currentTideEvents.value().first.time.time_since_epoch().count());
       Serial.println(currentTideEvents.value().second.time.time_since_epoch().count());
 
-      auto previous = currentTideEvents.value().first;
-      auto next = currentTideEvents.value().second;
-      auto now = ntp.epoch() * 1000;
-      auto timeFromPrevious = now - previous.time.time_since_epoch().count();
-      auto duration = next.time.time_since_epoch().count() - previous.time.time_since_epoch().count();
-
-      auto progress = timeFromPrevious / (float)duration;
-      auto eased = (1.0f - cos(PI * progress)) / 2.0f;
-
-      Serial.println(eased);
-
-      Serial.println(ntp.epoch());
-      Serial.println(ntp.formattedTime("%d. %B %Y")); // dd. Mmm yyyy
-      Serial.println(ntp.formattedTime("%A %T")); // Www hh:mm:ss
+      
     }
   } 
   else {
     Serial.println("No valid time data");
   }
   
+  updateLEDs();  
   delay(10000);
 }
