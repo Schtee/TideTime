@@ -14,9 +14,12 @@
 
 #include <ArduinoJson.h>
 
+#include <FastLED.h>
+
 #include "NTP.h"
 
 #include <chrono>
+#include <optional>
 
 #define TZ_INFO "Europe/London"
 
@@ -55,14 +58,15 @@ const char* ca = \
 "-----END CERTIFICATE-----\n";
 */
 
-struct TideEvent {
-  tide_time time;
-  int type;
-}
-
 JsonDocument jsonDoc;
-typedef std::chrono::sys_time<std::chrono::milliseconds> tide_time;
-typedef std::optional<std::pair<TideEvent, TideEvent>> MaybeTideEventPair;
+typedef std::chrono::sys_time<std::chrono::milliseconds> TideTime;
+
+struct TideEvent {
+  TideTime time;
+  int type;
+};
+
+typedef std::optional<std::pair<TideEvent, TideEvent> > MaybeTideEventPair;
 
 std::chrono::sys_time<std::chrono::milliseconds> parse8601(std::string str) {
   std::istringstream in{str};
@@ -74,9 +78,13 @@ std::chrono::sys_time<std::chrono::milliseconds> parse8601(std::string str) {
 
 MaybeTideEventPair getPreviousAndNextEvent(JsonArray eventList) {
   TideEvent previous;
-  int now = ntp.epoch() * 1000;
+  time_t now = ntp.epoch() * 1000;
+  Serial.print("Now: ");
+  Serial.println(now);
+
   for (auto x : eventList) {
     auto time = parse8601(x["dateTime"].as<const char*>());
+    Serial.println(time.time_since_epoch().count());
 
     TideEvent e = { time, x["eventType"].as<int>() };
 
@@ -85,14 +93,13 @@ MaybeTideEventPair getPreviousAndNextEvent(JsonArray eventList) {
     }
 
     previous = e;
-    Serial.println(time.time_since_epoch().count());
   }
   return std::nullopt;
 }
 
-std::optional<std::pair<tide_time, tide_time>> currentTideEvents;
+MaybeTideEventPair currentTideEvents;
 
-std::pair<tide_time, tide_time> getPreviousAndNextEvent() {
+void setCurrentTideEvents() {
   HTTPClient http;
 
   Serial.print("[HTTP] begin...\n");
@@ -112,13 +119,14 @@ std::pair<tide_time, tide_time> getPreviousAndNextEvent() {
     // file found at server
     if (httpCode == HTTP_CODE_OK) {
       String payload = http.getString();
-      Serial.println(payload);
+      //Serial.println(payload);
       deserializeJson(jsonDoc, payload);
       auto eventList = jsonDoc["tidalEventList"].as<JsonArray>();
       Serial.println(eventList[0]["eventType"].as<int>());
       currentTideEvents = getPreviousAndNextEvent(eventList);
     }
-  } else {
+  } 
+  else {
     Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
 
@@ -147,9 +155,7 @@ void setup() {
   
   ntp.ruleDST("BST", Last, Sun, Mar, 1, 60);
   ntp.ruleSTD("GMT", Last, Sun, Oct, 2, 0);
-  ntp.begin();
-
-  
+  ntp.begin(); 
 }
 
 bool calculatedTideTime = false;
@@ -157,6 +163,21 @@ void loop() {
   if (ntp.update()) {
     if (!calculatedTideTime) {
       calculatedTideTime = true;
+      setCurrentTideEvents();
+      Serial.println("Set tide events:");
+      Serial.println(currentTideEvents.value().first.time.time_since_epoch().count());
+      Serial.println(currentTideEvents.value().second.time.time_since_epoch().count());
+
+      auto previous = currentTideEvents.value().first;
+      auto next = currentTideEvents.value().second;
+      auto now = ntp.epoch() * 1000;
+      auto timeFromPrevious = now - previous.time.time_since_epoch().count();
+      auto duration = next.time.time_since_epoch().count() - previous.time.time_since_epoch().count();
+
+      auto progress = timeFromPrevious / (float)duration;
+      auto eased = (1.0f - cos(PI * progress)) / 2.0f;
+
+      Serial.println(eased);
 
       Serial.println(ntp.epoch());
       Serial.println(ntp.formattedTime("%d. %B %Y")); // dd. Mmm yyyy
