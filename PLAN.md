@@ -881,7 +881,61 @@ remainder is non-negative, e.g. `hours = offset / 60; mins = offset % 60; if (mi
 { mins += 60; hours -= 1; }` and pass the absolute value of `mins`. Not done here because
 Phase A code was deliberately left untouched during Phase B.
 
-### 17.4 Unverified on hardware
+### 17.4 Bug found and fixed: NTP started before the network was up
+
+**Symptom (from the serial log):** the device booted, printed the loaded settings, then
+immediately hit `assert failed: xQueueSemaphoreTake queue.c:1709 (( pxQueue ))` and rebooted
+in a loop.
+
+**Root cause.** `setup()` called `ntp.begin()` *before* the radio was up — i.e. before
+`beginWifiConnect()` or `startAccessPoint()` had run, so no network interface existed at all.
+
+The `sstaub/NTP` library's `begin()` → `init()` does:
+
+```cpp
+udp->begin(NTP_PORT);   // socket() succeeds, but bind() fails with no active interface
+bool syncOk = ntpUpdate();  // <-- runs unconditionally, ignoring begin()'s return value
+```
+
+In core 3.3.11 `WiFiUDP` is `NetworkUDP`. `NetworkUDP::begin()` calls `bind()`, which fails
+without an active interface; it then calls `stop()` and returns 0. `NTP::init()` ignores that
+return value and calls `ntpUpdate()` anyway, which does `beginPacket()` / `endPacket()` on the
+dead socket. The subsequent `sendto()`/`recvfrom()` on a socket with no bound lwIP queue hits
+the FreeRTOS `xQueueSemaphoreTake` assert on a null `pxQueue` and aborts the device.
+
+**Why this was introduced.** The *original* sketch was correct — it had:
+
+```cpp
+while ((wifiMulti.run() != WL_CONNECTED)) { delay(100); }   // blocks until connected
+ntp.begin();                                                  // only then
+```
+
+The rewrite moved `ntp.begin()` into `setup()` but dropped the "wait for the connection"
+guarantee that the original blocking loop provided. The invariant was lost in translation.
+
+**The fix (three parts):**
+
+1. `ntp.begin()` is **no longer called in `setup()`**. It moved into `startNtp()`, which is
+   invoked from `pollWifiConnect()` at the exact moment `WiFi.status()` first reports
+   `WL_CONNECTED`.
+2. A global `bool ntpStarted` gates `ntp.update()` in the main loop. `NTP::update()` retries
+   the sync on *every* call until one succeeds, so each retry against a never-bound socket
+   would crash. The admin panel's timezone-change handler also guards on `ntpStarted` — the
+   admin page is reachable in AP mode, where the client has not been started.
+3. **Link-loss handling.** In `MODE_RUNNING` the link is now monitored. If it drops, the NTP
+   client is stopped (`ntp.stop()`) *before* the interface disappears from under its socket,
+   `ntpStarted` is cleared, and a STA-only reconnect is attempted. `ntp.update()` is not
+   called again until the client has been restarted on a live interface.
+
+New API in `Provisioning.h`:
+
+```cpp
+extern bool ntpStarted;
+void startNtp();      // idempotent; calls applyTimezone() then ntp.begin()
+bool ntpHasSynced();  // ntpStarted && ntp.epoch() > 1000000000
+```
+
+### 17.5 Unverified on hardware
 
 Nothing was flashed. Compile-verified only: NVS read/write at runtime, AP bring-up, the
 connect state machine, the DNS captive portal, NTP rule application, the EasyTide TLS
@@ -889,7 +943,7 @@ fetch against `easytide.admiralty.co.uk`, captive-portal auto-popup on Android/i
 `/scan` behaviour while the AP is up, LED strip output, NVS persistence across power
 cycles, and the admin live-apply on a physical strip.
 
-### 17.5 Build command
+### 17.6 Build command
 
 ```powershell
 & "C:\Users\schte\AppData\Local\Programs\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --clean --fqbn esp32:esp32:esp32 --warnings all "C:\Users\schte\Documents\Arduino\TideTime\TideTime"

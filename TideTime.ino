@@ -263,9 +263,12 @@ void setup() {
                 (unsigned)config.tzDstHour, (unsigned)config.tzStdMonth,
                 (unsigned)config.tzStdWeek, (unsigned)config.tzStdHour);
 
-  // 2. Timezone rules must be pushed into the NTP object before ntp.begin().
+  // 2. Timezone rules are stored in config now; they are pushed into the NTP
+  //    object by startNtp() once the network is up. ntp.begin() must NOT be
+  //    called here: its UDP socket cannot bind without an active network
+  //    interface, and the library's immediate sync attempt then trips a
+  //    FreeRTOS assert inside lwIP and reboots the device.
   applyTimezone();
-  ntp.begin();
 
   // 3. Runtime gradient palette + LED strip.
   palette = buildPalette(config.palette);
@@ -298,17 +301,21 @@ void loop() {
   // 3. Web UI.
   server.handleClient();
 
-  // 4. Time sync.
-  if (!ntp.update()) {
+  // 4. Time sync. Only once the NTP client has been started: NTP::update()
+  //    retries the sync on every call until it succeeds, and retrying on a
+  //    socket that was never bound crashes in lwIP.
+  if (ntpStarted) {
+    if (!ntp.update()) {
 #if DEBUG_SERIAL
-    Serial.println("No valid time data");
+      Serial.println("No valid time data");
 #endif
+    }
   }
 
   // 5. Tide data: first fetch once WiFi + a valid clock are available, then
   //    every 6 hours (1-minute retry after a failure), plus immediately when
   //    the station ID was changed from the admin panel.
-  if (WiFi.status() == WL_CONNECTED && ntp.epoch() > 1000000000UL) {
+  if (WiFi.status() == WL_CONNECTED && ntpHasSynced()) {
     const unsigned long nowMs = millis();
     const unsigned long interval = lastTideFetchOk ? TIDE_REFETCH_MS : TIDE_RETRY_MS;
     if (tideRefetchRequested || lastTideAttemptMs == 0 ||

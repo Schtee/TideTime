@@ -12,6 +12,7 @@ static const unsigned long AP_GRACE_MS = 60000;         // keep AP up 60 s after
 // deviceMode == MODE_CONNECT_STA). millis()-subtraction is rollover-safe.
 static unsigned long connectStart = 0;  // when the current connect attempt started
 static unsigned long connectedAt = 0;   // 0 = not yet connected; else grace-period start
+static bool runningLinkLost = false;    // set when the link drops while MODE_RUNNING
 
 String apSsid() {
   // "TideTime-" + last 4 hex digits of the MAC, zero-padded manually
@@ -59,7 +60,41 @@ void beginWifiConnect() {
   Serial.printf("[Provisioning] Connecting to \"%s\" (20 s budget)...\n", config.ssid.c_str());
 }
 
+// Reconnect after the link dropped while running. Unlike the initial
+// provisioning attempt this does not need the access point or the 60 s
+// grace period - the user is not waiting on a captive portal - so stay in
+// STA-only mode.
+static void reconnectWifi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(config.ssid.c_str(), config.psk.c_str());
+  connectStart = millis();
+  connectedAt = 0;
+  deviceMode = MODE_CONNECT_STA;
+  Serial.println("[Provisioning] Reconnecting to stored network...");
+}
+
 void pollWifiConnect() {
+  if (deviceMode == MODE_RUNNING) {
+    // Watch the link while running. If it drops we must not keep calling
+    // ntp.update(): the UDP socket is bound to an interface that has gone
+    // away, and the retry path can trip the same lwIP assert that the
+    // initial-start ordering bug did. Stop the NTP client and reconnect.
+    if (WiFi.status() != WL_CONNECTED) {
+      if (!runningLinkLost) {
+        runningLinkLost = true;
+        lastError = "Connection lost, reconnecting...";
+        Serial.println("[Provisioning] Link lost - stopping NTP client");
+        ntp.stop();
+        ntpStarted = false;
+        reconnectWifi();
+      }
+    } else if (runningLinkLost) {
+      runningLinkLost = false;
+      lastError = "";
+    }
+    return;
+  }
+
   if (deviceMode != MODE_CONNECT_STA) {
     return;
   }
@@ -73,6 +108,9 @@ void pollWifiConnect() {
       lastError = "";
       Serial.printf("[Provisioning] Connected, IP: %s (AP stays up for 60 s so /status can be polled)\n",
                     WiFi.localIP().toString().c_str());
+      // The NTP client can only be started now: its UDP socket needs a live
+      // network interface (see startNtp()).
+      startNtp();
     }
     if (now - connectedAt >= AP_GRACE_MS) {
       stopAccessPoint();
@@ -136,4 +174,32 @@ void applyTimezone() {
     ntp.ruleSTD(config.tzStdName.c_str(), (int8_t)config.tzStdWeek, Sun,
                 (int8_t)config.tzStdMonth, (int8_t)config.tzStdHour, config.tzStdOffset);
   }
+}
+
+bool ntpStarted = false;
+
+// Start the NTP client, but only once the network is actually up.
+//
+// NTP::begin() -> init() -> udp->begin(123) opens and binds a UDP socket and
+// then immediately calls ntpUpdate(). If no network interface is active the
+// bind() fails, NetworkUDP::stop() runs, and the follow-up sendto()/recvfrom()
+// on the dead socket trips the FreeRTOS xQueueSemaphoreTake assert inside lwIP
+// (pxQueue == NULL), which aborts and reboots the ESP32.
+//
+// So this must only be called once WiFi.status() == WL_CONNECTED.
+void startNtp() {
+  if (ntpStarted) {
+    return;
+  }
+  // The timezone rules must be in place before the client starts.
+  applyTimezone();
+  Serial.println("[NTP] Starting NTP client (network is up)");
+  ntp.begin();
+  ntpStarted = true;
+}
+
+bool ntpHasSynced() {
+  // NTP::epoch() is only meaningful once a sync has succeeded; before that it
+  // returns 0.
+  return ntpStarted && ntp.epoch() > 1000000000UL;
 }

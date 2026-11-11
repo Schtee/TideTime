@@ -29,3 +29,24 @@ void pollWifiConnect();      // called from loop(); advances the connect state m
 void applyTimezone();        // pushes config's timezone rules into the NTP object
 String apSsid();             // "TideTime-XXXX"
 String wifiStatusText();     // human-readable WiFi status
+
+// NTP client lifecycle.
+//
+// The NTP library opens a UDP socket inside begin() and immediately attempts a
+// sync. If the radio is not up yet, socket() succeeds but bind() fails, which
+// leaves a dead socket behind; the subsequent ntpUpdate() then trips the
+// FreeRTOS xQueueSemaphoreTake assert inside lwIP and reboots the device.
+// So begin() must not be called until WiFi is actually connected.
+//
+// ntpStarted is false until that has happened. The main loop must not call
+// ntp.update() while it is false, because NTP::update() retries the sync on
+// every call until it succeeds - each retry on a dead socket crashes.
+extern bool ntpStarted;
+
+// Starts the NTP client. Safe to call only once WiFi is connected; it is a
+// no-op if the client has already been started.
+void startNtp();
+
+// True once the NTP client has been started and has completed at least one
+// successful sync. Use this to decide whether the clock is usable.
+bool ntpHasSynced();

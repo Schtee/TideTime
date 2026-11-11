@@ -647,7 +647,12 @@ void handleAdminSave() {
     FastLED.show();
   }
   applyTimezone();
-  ntp.update();
+  // Only poke the NTP client if it has actually been started. The admin page
+  // is reachable in access-point mode too, where ntp.begin() has not run yet
+  // and calling ntp.update() would retry the sync on an unbound UDP socket.
+  if (ntpStarted) {
+    ntp.update();
+  }
   if (stationChanged) {
     // The HTTPS fetch can block for seconds, so the main loop performs it;
     // the flag survives until WiFi + a valid clock allow the fetch.
