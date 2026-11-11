@@ -276,10 +276,14 @@ void setup() {
   FastLED.setMaxPowerInVoltsAndMilliamps(5, 2500);
   FastLED.setBrightness(config.brightness);
 
-  // 4. Web UI: routes registered exactly once, then start the server.
-  setupRoutes();
-  server.begin();
-  Serial.println("[SETUP] HTTP server listening on port 80");
+  // 4. Initialise the lwIP stack. This MUST happen before any socket is
+  //    created. WebServer::begin() opens a listening socket via
+  //    lwip_socket(), which needs the lwIP TCP/IP thread to be running; that
+  //    thread is started by esp_netif_init() inside NetworkManager::begin().
+  //    Calling server.begin() before this leaves the lwIP queue
+  //    uninitialised and the device asserts and reboots:
+  //      assert failed: xQueueSemaphoreTake queue.c:1709 (( pxQueue ))
+  initNetwork();
 
   // 5. Connect to the stored network, or start the setup AP.
   if (config.hasWifi()) {
@@ -287,6 +291,11 @@ void setup() {
   } else {
     startAccessPoint();
   }
+
+  // 6. Web UI: routes registered exactly once, then start the server.
+  setupRoutes();
+  server.begin();
+  Serial.println("[SETUP] HTTP server listening on port 80");
 }
 
 void loop() {

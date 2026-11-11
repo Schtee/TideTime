@@ -881,51 +881,79 @@ remainder is non-negative, e.g. `hours = offset / 60; mins = offset % 60; if (mi
 { mins += 60; hours -= 1; }` and pass the absolute value of `mins`. Not done here because
 Phase A code was deliberately left untouched during Phase B.
 
-### 17.4 Bug found and fixed: NTP started before the network was up
+### 17.4 Bug found and fixed: web server started before lwIP was initialised
 
 **Symptom (from the serial log):** the device booted, printed the loaded settings, then
 immediately hit `assert failed: xQueueSemaphoreTake queue.c:1709 (( pxQueue ))` and rebooted
 in a loop.
 
-**Root cause.** `setup()` called `ntp.begin()` *before* the radio was up — i.e. before
-`beginWifiConnect()` or `startAccessPoint()` had run, so no network interface existed at all.
+**Root cause (confirmed by decoding the device backtrace against the ELF symbol table).**
 
-The `sstaub/NTP` library's `begin()` → `init()` does:
+The decoded backtrace was:
 
-```cpp
-udp->begin(NTP_PORT);   // socket() succeeds, but bind() fails with no active interface
-bool syncOk = ntpUpdate();  // <-- runs unconditionally, ignoring begin()'s return value
+```
+setup()
+  → WebServer::begin()
+    → NetworkServer::begin(port)
+      → lwip_socket()
+        → netconn_new_with_proto_and_callback()
+          → tcpip_send_msg_wait_sem()      ← xQueueSemaphoreTake on a NULL queue
+            → panic_abort
 ```
 
-In core 3.3.11 `WiFiUDP` is `NetworkUDP`. `NetworkUDP::begin()` calls `bind()`, which fails
-without an active interface; it then calls `stop()` and returns 0. `NTP::init()` ignores that
-return value and calls `ntpUpdate()` anyway, which does `beginPacket()` / `endPacket()` on the
-dead socket. The subsequent `sendto()`/`recvfrom()` on a socket with no bound lwIP queue hits
-the FreeRTOS `xQueueSemaphoreTake` assert on a null `pxQueue` and aborts the device.
+`WebServer::begin()` opens a listening socket via `lwip_socket()`, which requires the
+**lwIP TCP/IP thread to be running**. That thread is started by `esp_netif_init()`, which the
+Arduino core only calls from `NetworkManager::begin()`. The core's `initArduino()` does *not*
+call it, and `WiFiGenericClass::mode()` only reaches it via `wifiLowLevelInit()` **the first
+time the radio mode actually changes**.
 
-**Why this was introduced.** The *original* sketch was correct — it had:
+The rewritten `setup()` called `server.begin()` *before* `startAccessPoint()` /
+`beginWifiConnect()`, so no network stack existed yet and the socket creation asserted.
 
-```cpp
-while ((wifiMulti.run() != WL_CONNECTED)) { delay(100); }   // blocks until connected
-ntp.begin();                                                  // only then
+**The fix:**
+
+1. Added `initNetwork()` to `Provisioning`, which calls `Network.begin()`
+   (`NetworkManager::begin()`) explicitly. It is idempotent — `NetworkManager::begin()`
+   guards with a static flag — and it guarantees `esp_netif_init()` has run before any
+   socket is created.
+2. `setup()` now calls `initNetwork()` **before** `startAccessPoint()` / `beginWifiConnect()`
+   and before `server.begin()`.
+
+**Verified at the machine-code level.** Disassembling the compiled ELF shows `setup()` now
+calls, in program order:
+
+```
+Config::load()  →  applyTimezone()  →  buildPalette()
+  →  initNetwork()        (→ NetworkManager::begin() → esp_netif_init())
+  →  startAccessPoint()   (→ WiFi.mode())
+  →  setupRoutes()
+  →  WebServer::begin()   ← now strictly after lwIP is up
 ```
 
-The rewrite moved `ntp.begin()` into `setup()` but dropped the "wait for the connection"
-guarantee that the original blocking loop provided. The invariant was lost in translation.
+**Note on the earlier misdiagnosis.** The first attempt at this fix concluded that `ntp.begin()`
+was the culprit, because it was the last thing logged before the crash. That was wrong — the
+crash was in `server.begin()`, which runs *after* the settings print but produces no log
+output of its own. The NTP ordering change it introduced was still correct on its own merits
+(see below), but it was not the fix for this assert. **The backtrace should have been decoded
+first.**
 
-**The fix (three parts):**
+### 17.4a Related change: NTP client start ordering
 
-1. `ntp.begin()` is **no longer called in `setup()`**. It moved into `startNtp()`, which is
-   invoked from `pollWifiConnect()` at the exact moment `WiFi.status()` first reports
-   `WL_CONNECTED`.
-2. A global `bool ntpStarted` gates `ntp.update()` in the main loop. `NTP::update()` retries
-   the sync on *every* call until one succeeds, so each retry against a never-bound socket
-   would crash. The admin panel's timezone-change handler also guards on `ntpStarted` — the
-   admin page is reachable in AP mode, where the client has not been started.
-3. **Link-loss handling.** In `MODE_RUNNING` the link is now monitored. If it drops, the NTP
-   client is stopped (`ntp.stop()`) *before* the interface disappears from under its socket,
-   `ntpStarted` is cleared, and a STA-only reconnect is attempted. `ntp.update()` is not
-   called again until the client has been restarted on a live interface.
+Independently of the above, deferring `ntp.begin()` until the network is up is correct and
+was retained:
+
+- `ntp.begin()` moved out of `setup()` into `startNtp()`, called from `pollWifiConnect()`
+  the first time `WiFi.status()` reports `WL_CONNECTED`. The `sstaub/NTP` library's
+  `init()` opens a UDP socket and *immediately* attempts a sync; with no active interface
+  the `bind()` fails, leaving a dead socket, and `NTP::init()` ignores `begin()`'s return
+  value and calls `ntpUpdate()` on it anyway.
+- A global `bool ntpStarted` gates `ntp.update()` in the main loop, because
+  `NTP::update()` retries the sync on *every* call until one succeeds — each retry against a
+  never-bound socket would crash. The admin panel's timezone-change handler is guarded the
+  same way, since the admin page is reachable in AP mode where the client has not started.
+- In `MODE_RUNNING` the link is now monitored. If it drops, the NTP client is stopped
+  (`ntp.stop()`) *before* the interface disappears from under its socket, `ntpStarted` is
+  cleared, and a STA-only reconnect is attempted.
 
 New API in `Provisioning.h`:
 

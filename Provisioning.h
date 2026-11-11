@@ -22,6 +22,10 @@ extern NTP ntp;
 // Captive-portal DNS server, defined in Provisioning.cpp.
 extern DNSServer dnsServer;
 
+// Initialise the lwIP stack. Must be called before any socket is created
+// (web server, UDP client). Idempotent.
+void initNetwork();
+
 void startAccessPoint();      // brings up softAP + DNS captive portal
 void stopAccessPoint();       // tears down softAP + DNS
 void beginWifiConnect();     // non-blocking connect using config.ssid/config.psk

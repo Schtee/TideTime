@@ -24,6 +24,26 @@ String apSsid() {
   return String("TideTime-") + buf;
 }
 
+// Initialise lwIP.
+//
+// Both the web server (WebServer::begin -> lwip_socket) and the NTP client
+// (NTP::begin -> udp->begin) need the lwIP TCP/IP thread to be running.
+// That thread is started by esp_netif_init(), which the Arduino core only
+// calls from NetworkManager::begin(). WiFiGenericClass::mode() calls it too,
+// but only the first time it actually changes the radio mode - so relying on
+// that alone is fragile.
+//
+// Calling Network.begin() directly is idempotent (NetworkManager::begin()
+// guards with a static flag) and guarantees the stack is up before any
+// socket is created.
+void initNetwork() {
+  if (!Network.begin()) {
+    Serial.println("[Provisioning] ERROR: Network.begin() failed - lwIP not available");
+  } else {
+    Serial.println("[Provisioning] lwIP network stack initialised");
+  }
+}
+
 void startAccessPoint() {
   // AP and STA together, so the STA side can still try to connect.
   WiFi.mode(WIFI_AP_STA);

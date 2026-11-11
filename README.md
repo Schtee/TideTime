@@ -159,3 +159,15 @@ service provides roughly 7 days of predictions.
 
 **Settings didn't save.** The device must be able to write to NVS. If the admin page
 returns an error, check the serial log.
+
+**The device reboots with `assert failed: xQueueSemaphoreTake`.** This means a socket was
+opened before the lwIP network stack was up. On a normal boot the log shows:
+
+```
+[Provisioning] lwIP network stack initialised
+[Provisioning] AP up: TideTime-XXXX at 192.168.4.1
+[SETUP] HTTP server listening on port 80
+```
+
+If the "lwIP network stack initialised" line is missing, the ordering is broken. The web
+server and the NTP client both need that line to have appeared first.
