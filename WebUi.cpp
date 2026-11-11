@@ -125,44 +125,104 @@ static void truncateTo5(String& s) {
 
 static const char SETUP_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TideTime — WiFi setup</title><style>
+<title>TideTime - WiFi setup</title><style>
 body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:1rem;background:#0b1e2d;color:#e8f4f8}
 main{max-width:420px;margin:0 auto}
 h1{font-size:1.4rem;margin:.2rem 0 .8rem}
 label{display:block;margin:.7rem 0 .25rem;font-size:.9rem}
-input{width:100%;box-sizing:border-box;padding:.6rem;font-size:1rem;border:1px solid #34576e;border-radius:8px;background:#12314a;color:#e8f4f8}
+input,select{width:100%;box-sizing:border-box;padding:.6rem;font-size:1rem;border:1px solid #34576e;border-radius:8px;background:#12314a;color:#e8f4f8}
+select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,#7fd0f2 50%),linear-gradient(135deg,#7fd0f2 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:2.2rem}
 button{margin-top:.9rem;width:100%;padding:.7rem;font-size:1rem;border:0;border-radius:8px;background:#31b3e8;color:#04263a;font-weight:600}
 button.secondary{background:#1d4257;color:#cfe9f5}
 #status{margin-top:.8rem;font-size:.9rem;min-height:1.2em;color:#ffd479}
+#manualWrap{display:none}
+.hint{font-size:.8rem;color:#9fc4d6;margin:.35rem 0 0}
 </style></head><body><main>
 <h1>TideTime</h1>
 <p>Connect the device to your WiFi network. You are on its setup access point.</p>
 <div id="status"></div>
 <form method="POST" action="/setup">
- <label for="ssid">Network name (SSID)</label>
- <input id="ssid" name="ssid" maxlength="32" list="ssidList" autocomplete="off" required>
- <datalist id="ssidList"></datalist>
+ <label for="ssidSel">Network</label>
+ <select id="ssidSel" name="ssid" required>
+  <option value="" selected disabled>Scanning for networks...</option>
+ </select>
+ <div id="manualWrap">
+  <label for="ssidManual">Network name (SSID)</label>
+  <input id="ssidManual" name="ssidManual" maxlength="32" autocomplete="off">
+  <p class="hint">Use this for hidden networks, or networks the device cannot see.</p>
+ </div>
  <label for="psk">Password (leave empty for open networks)</label>
  <input id="psk" name="psk" type="password" maxlength="63" autocomplete="off">
  <button type="submit">Save and connect</button>
 </form>
-<button type="button" class="secondary" id="scanBtn">Scan for networks</button>
+<button type="button" class="secondary" id="scanBtn">Rescan for networks</button>
 <script>
 var st=document.getElementById('status');
-document.getElementById('scanBtn').addEventListener('click',function(){
- st.textContent='Scanning...';
- fetch('/scan').then(function(r){return r.json();}).then(function(list){
-  var dl=document.getElementById('ssidList'); dl.innerHTML='';
-  for(var i=0;i<list.length;i++){
-   var o=document.createElement('option');
-   o.value=list[i].ssid;
-   o.label=list[i].ssid+' ('+list[i].rssi+' dBm'+(list[i].secure?', secured':'')+')';
-   dl.appendChild(o);
-  }
-  st.textContent=list.length?('Found '+list.length+' networks - start typing to pick one'):('No networks found');
- }).catch(function(){st.textContent='Scan failed - try again';});
+var sel=document.getElementById('ssidSel');
+var manualWrap=document.getElementById('manualWrap');
+// NB: do NOT name this "manual" - that is a legacy built-in global
+// (window.manual, the scrollable body area) and it has no focus() method.
+var manualInput=document.getElementById('ssidManual');
+
+// Signal strength -> a short human label.
+function sigLabel(rssi){
+ if(rssi>=-55)return 'Excellent';
+ if(rssi>=-67)return 'Good';
+ if(rssi>=-75)return 'Fair';
+ if(rssi>=-85)return 'Weak';
+ return 'Very weak';
+}
+
+function build(list){
+ sel.innerHTML='';
+ var ph=document.createElement('option');
+ ph.value=''; ph.textContent=list.length?'Choose a network...':'No networks found';
+ ph.disabled=true; ph.selected=true;
+ sel.appendChild(ph);
+
+ for(var i=0;i<list.length;i++){
+  var n=list[i];
+  var o=document.createElement('option');
+  o.value=n.ssid;
+  o.textContent=n.ssid+' - '+sigLabel(n.rssi)+' ('+n.rssi+' dBm)'+(n.secure?' [secured]':' [open]');
+  sel.appendChild(o);
+ }
+ // Final option: manual entry, for hidden networks the scan cannot see.
+ var other=document.createElement('option');
+ other.value='__manual__';
+ other.textContent='Other... enter network name manually';
+ sel.appendChild(other);
+}
+
+function scan(){
+ st.textContent='Scanning for networks...';
+ sel.disabled=true;
+ fetch('/scan',{cache:'no-store'}).then(function(r){return r.json();}).then(function(list){
+  build(list);
+  sel.disabled=false;
+  st.textContent=list.length?('Found '+list.length+' network'+(list.length===1?'':'s'))
+                            :'No networks found - use "Other..." to enter one manually';
+ }).catch(function(){
+  build([]);
+  sel.disabled=false;
+  st.textContent='Scan failed - use "Other..." to enter the network name manually';
+ });
+}
+
+sel.addEventListener('change',function(){
+ var isManual=sel.value==='__manual__';
+ manualWrap.style.display=isManual?'block':'none';
+ if(isManual){manualInput.focus();}
+ else{manualInput.value='';}
 });
-fetch('/status').then(function(r){return r.json();}).then(function(s){
+
+document.getElementById('scanBtn').addEventListener('click',scan);
+
+// Populate the list automatically when the page loads.
+scan();
+
+// Surface any previous error.
+fetch('/status',{cache:'no-store'}).then(function(r){return r.json();}).then(function(s){
  if(s.error){st.textContent='Error: '+s.error;}
 });
 </script>)rawliteral";
@@ -434,7 +494,12 @@ static void handleSetupGet() {
 }
 
 void handleSetupSave() {
+  // The network picker is a <select>; the "Other..." option reveals a second
+  // text input for networks the scan cannot see (hidden SSIDs etc.).
   String ssid = server.arg("ssid");
+  if (ssid == "__manual__") {
+    ssid = server.arg("ssidManual");
+  }
   ssid.trim();
   // Do not trim the PSK: passwords may legally contain leading/trailing spaces.
   String psk = server.arg("psk");

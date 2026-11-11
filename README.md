@@ -25,10 +25,22 @@ Connect your phone to it. Most phones will pop up the setup page automatically
 
 ### 2. Connect to your WiFi
 
-On the setup page you can:
+The setup page scans for nearby networks as soon as it loads and shows them in a
+dropdown, each with a signal strength rating and whether it is secured:
 
-- type your network's SSID and password, or
-- press **Scan** to list nearby networks and pick one from the dropdown.
+```
+HomeNetwork  - Excellent (-42 dBm) [secured]
+TNCAPCE0FAA  - Good (-58 dBm) [secured]
+Cafe Guest   - Fair (-71 dBm) [open]
+```
+
+Pick one, enter the password, and submit. **Leave the password empty for an open
+network.**
+
+If your network isn't listed — a hidden SSID, or one the device can't see — choose
+**"Other... enter network name manually"** and type the name yourself.
+
+Press **Rescan for networks** to refresh the list.
 
 Submit, and the device joins your network. The page polls for status and shows you the
 IP address it got. **Note that the access point stays up for 60 seconds after connecting**
@@ -147,7 +159,8 @@ See `PLAN.md` for the full design rationale and the implementation record.
 Some devices bypass the DNS redirect (notably Android with a hardcoded DNS resolver).
 
 **The scan finds no networks.** Scanning briefly interrupts the radio. Wait a few seconds
-and try again. You can always type the SSID by hand.
+and press **Rescan for networks**. If your network is still missing, choose
+**"Other... enter network name manually"** and type the SSID yourself.
 
 **"Network not found".** The SSID was not visible to the device. Check for typos, and note
 that some routers hide the SSID band or the device may be unable to see 5 GHz-only
