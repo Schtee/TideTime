@@ -1,0 +1,161 @@
+# TideTime
+
+A tide-height LED strip clock for the ESP32. Fetches tidal predictions from the
+ADMIRALTY EasyTide service and renders them on a WS2812 LED strip.
+
+The device ships with a **web admin panel**: on first boot it starts its own WiFi access
+point so you can configure it from your phone without any special tooling.
+
+---
+
+## Getting started
+
+### 1. First boot
+
+On a fresh device (no saved settings) the ESP32 starts an access point:
+
+| | |
+|---|---|
+| **SSID** | `TideTime-XXXX` (last 4 hex digits of the MAC) |
+| **Password** | none — the network is open |
+| **Address** | `http://192.168.4.1` |
+
+Connect your phone to it. Most phones will pop up the setup page automatically
+(captive portal). If not, open `http://192.168.4.1` manually.
+
+### 2. Connect to your WiFi
+
+On the setup page you can:
+
+- type your network's SSID and password, or
+- press **Scan** to list nearby networks and pick one from the dropdown.
+
+Submit, and the device joins your network. The page polls for status and shows you the
+IP address it got. **Note that the access point stays up for 60 seconds after connecting**
+so the page can display the result — after that the AP shuts down and the device is only
+reachable on your LAN.
+
+If the connection fails, the device falls back to access point mode and shows the error
+(e.g. "Network not found"). You can correct the details and try again.
+
+### 3. Admin panel
+
+Once connected, the admin panel is at **`http://<your-device-ip>/`**. Settings you can
+change, all applied immediately without a reboot:
+
+| Setting | Notes |
+|---|---|
+| **Gradient palette** | 4 stops. Each has a colour picker, R/G/B inputs and a position slider (0–255). A live preview bar shows the gradient. |
+| **Number of LEDs** | 1–300. |
+| **Brightness** | 0–255. |
+| **Timezone** | DST on/off, standard/daylight names, UTC offsets, and the start dates for each. |
+| **Station ID** | The EasyTide station code, e.g. `0546`. Changing it re-fetches the tide data. |
+
+All settings are stored in NVS (flash) and survive a power cycle.
+
+---
+
+## Timezone configuration
+
+The offsets are **minutes from UTC** — e.g. `0` for GMT, `60` for BST, `-300` for EST,
+`330` for IST. This maps directly onto the underlying NTP library's parameters and avoids
+ambiguity.
+
+The day-of-week for both DST transitions is fixed to **Sunday**, matching the behaviour
+of the original sketch. (UK and EU rules are all "last Sunday in March / October".)
+
+---
+
+## Factory reset
+
+Press **Factory reset** at the bottom of the admin panel. This clears all saved settings
+and reboots the device into access point mode.
+
+If the device is unreachable (for example you changed your WiFi password), you can also
+erase it from the Arduino IDE: **Tools → Erase All Flash**, then re-upload.
+
+---
+
+## Building
+
+The project is a standard Arduino sketch. The main file must remain `TideTime.ino` in a
+folder named `TideTime/`, and all other files live in that same folder.
+
+```powershell
+arduino-cli compile --fqbn esp32:esp32:esp32 "TideTime"
+arduino-cli upload  --fqbn esp32:esp32:esp32 -p <PORT> "TideTime"
+```
+
+### Required libraries
+
+- **FastLED** 3.10.3 (Library Manager)
+- **ArduinoJson** 7.x (Library Manager)
+- **NTP** by sstaub (Library Manager) — for NTP time sync with timezone/DST rules
+- `WebServer`, `DNSServer` and `Preferences` ship with the ESP32 Arduino core
+
+### Flash usage
+
+The sketch uses **1,143,308 bytes (87%)** of the default 1.2 MB app partition. There is
+roughly **167 KB of headroom left**.
+
+If you need more room, switch the board's partition scheme in the Arduino IDE under
+**Tools → Partition Scheme** — `Minimal SPIFFS (1.9MB APP with OTA/128KB SPIFFS)` gives
+comfortable extra space. Alternatively `No FS 4MB (2MB APP x2)` gives 2 MB.
+
+---
+
+## Architecture
+
+| File | Responsibility |
+|---|---|
+| `TideTime.ino` | `setup()`/`loop()`, tide fetch, LED rendering |
+| `Config.h/.cpp` | Settings struct + NVS (`Preferences`) persistence |
+| `Palette.h/.cpp` | Runtime gradient palette (`CRGBPalette256`) |
+| `Provisioning.h/.cpp` | AP bring-up, captive-portal DNS, WiFi connect state machine, timezone rules |
+| `WebUi.h/.cpp` | HTTP routes, handlers, HTML/CSS/JS |
+
+### Operating modes
+
+```
+BOOT ──no saved wifi──► SETUP_AP ──credentials──► CONNECT_STA ──connected──► RUNNING
+  │                                                   │                        │
+  └──saved wifi──► CONNECT_STA ──failed/timeout──► SETUP_AP                   │
+```
+
+- **SETUP_AP** — access point and captive-portal DNS are up; waiting for credentials.
+- **CONNECT_STA** — access point is still up while the device joins your network.
+- **RUNNING** — connected; the access point is shut down.
+
+### Notes on the codebase
+
+- The gradient palette is built at runtime into a `CRGBPalette256` (256 entries), so
+  palette colours and stop positions are user-configurable.
+- `parse8601()` deliberately avoids `std::chrono::parse` / iostreams — they cost ~237 KB
+  of flash, which overflows the default app partition. It uses `sscanf` plus header-only
+  `std::chrono` calendar arithmetic instead.
+- The EasyTide request uses `WiFiClientSecure` with `setInsecure()`, because the original
+  code called `http.begin("https://...")` without a CA certificate and therefore never
+  completed a TLS handshake.
+
+See `PLAN.md` for the full design rationale and the implementation record.
+
+---
+
+## Troubleshooting
+
+**The phone doesn't show a captive portal popup.** Open `http://192.168.4.1` manually.
+Some devices bypass the DNS redirect (notably Android with a hardcoded DNS resolver).
+
+**The scan finds no networks.** Scanning briefly interrupts the radio. Wait a few seconds
+and try again. You can always type the SSID by hand.
+
+**"Network not found".** The SSID was not visible to the device. Check for typos, and note
+that some routers hide the SSID band or the device may be unable to see 5 GHz-only
+networks — the ESP32 is 2.4 GHz only.
+
+**The tide data never arrives.** Check the serial output at 115200 baud for
+`[Tide] GET failed`. The device needs working DNS and internet access. The EasyTide
+service provides roughly 7 days of predictions.
+
+**Settings didn't save.** The device must be able to write to NVS. If the admin page
+returns an error, check the serial log.
