@@ -963,15 +963,81 @@ void startNtp();      // idempotent; calls applyTimezone() then ntp.begin()
 bool ntpHasSynced();  // ntpStarted && ntp.epoch() > 1000000000
 ```
 
-### 17.5 Unverified on hardware
+### 17.5 Timezone UI simplification (zone dropdown)
 
-Nothing was flashed. Compile-verified only: NVS read/write at runtime, AP bring-up, the
-connect state machine, the DNS captive portal, NTP rule application, the EasyTide TLS
-fetch against `easytide.admiralty.co.uk`, captive-portal auto-popup on Android/iOS/Windows,
-`/scan` behaviour while the AP is up, LED strip output, NVS persistence across power
-cycles, and the admin live-apply on a physical strip.
+**Question raised:** the timezone section was complex - does it need offsets if a timezone
+is selected?
 
-### 17.6 Build command
+**Answer: yes, the offsets are still needed in the data model, but not in the UI.**
+
+- The ESP32 ships **no tzdata**, so IANA names (`Europe/London`) cannot be resolved. The
+  C library's `tzset()` needs either a zoneinfo file on the filesystem or a POSIX `TZ`
+  string; neither is present. ESP-IDF's own docs describe the POSIX form
+  (`WET0WEST,M3.5.0/1,M10.5.0`), not IANA names.
+- The `sstaub/NTP` library **never calls `setenv`/`tzset`**. It computes the UTC offset
+  purely from its own `ruleDST()`/`ruleSTD()` parameters
+  (`NTP.cpp:335-341`: `local = utcCurrent + dstOffset + timezoneOffset`).
+
+So a "pick a timezone" control can only work by shipping a table that maps a friendly
+name to the four values the library understands. That is what `TimeZones.h/.cpp` does -
+62 common zones, each carrying the standard/daylight offsets and the DST rule dates.
+
+**Implementation:**
+- `TimeZones.h/.cpp`: the table plus `timeZoneCount()`, `timeZoneAt()`,
+  `timeZoneMatch()`, `timeZoneDefaultIndex()`.
+- New endpoint `GET /admin/tz` serves the table as JSON.
+- The admin page gets a **Time zone** dropdown. Selecting a zone fills in every advanced
+  field and shows a summary line (e.g. `UTC+0 (GMT / BST, daylight saving to UTC+1)`).
+- A **"Custom (see advanced settings below)"** option appears when the values do not
+  match any known zone, and the manual fields live in a collapsed `<details>` block.
+- The admin POST handler reads `tzZone`: a valid index uses the table's values, `custom`
+  or a missing/invalid index falls back to the manual fields.
+
+**Bugs found and fixed while testing on the device:**
+1. The rewritten timezone block dropped the `id` attributes from six inputs
+   (`tzDstHour`, `tzStdHour`, `tzStdName`, `tzDstName`, `tzStdOffset`, `tzDstOffset`).
+   The JS looks them up by id, so `getElementById(...)` returned null and the script threw
+   `TypeError: Cannot set properties of null`, which stopped the zone list from loading at
+   all. Restored the ids and made every JS lookup null-safe.
+2. The `$()` helper was defined *after* the timezone script used it, so the timezone code
+   ran before it existed. Moved the definition to the top of the script.
+3. `updateTzSummary()` appended a duplicate "Custom" option on every call. Now it checks
+   whether the option already exists.
+4. `updateTzSummary()` ran before the zone list had loaded, marking everything
+   "custom". Now it returns early while the list is empty.
+
+**Verification of the DST rules.** The library's `week_t` enum's `Last` (0) was checked
+against the real device: a test sketch embedding the library's `calcDateDST()` verbatim
+showed it resolves to the true last Sunday in both 4-Sunday and 5-Sunday months
+(March 2026 -> 29th, March 2027 -> 28th, March 2028 -> 26th). The US, Australian, New
+Zealand and Chilean rules were verified against the tzdata source (`tzdata/europe`).
+
+**Verified on the device:** the dropdown loads 62 zones, auto-selects the zone matching
+the saved settings, applying a zone updates every field and the summary, manual edits
+switch to "Custom", and the choice survives a page reload (saved to NVS).
+
+### 17.7 Hardware verification (device present)
+
+The device was flashed and exercised directly (COM7, CP210x). Confirmed working:
+
+- Boots without the lwIP assert; `initNetwork()` logs
+  `lwIP network stack initialised`.
+- Joins the stored network, gets a LAN IP, and the NTP client starts only after the
+  connection (`[NTP] Starting NTP client (network is up)`).
+- The EasyTide TLS fetch now **succeeds** and tide events parse
+  (`[Tide] events set:` followed by two epoch timestamps) - this fixes the pre-existing
+  bug where the request used a plain `HTTPClient` with no CA.
+- The admin page loads, the timezone dropdown populates from `/admin/tz`, the saved zone
+  is auto-selected, changing zones updates every field and the summary, and the choice
+  survives a reload (NVS round-trip confirmed).
+- The NTP library's `Last` week semantics were confirmed on-device against the real
+  `calcDateDST()` for 2026-2028.
+
+Still not verified on hardware: the physical LED strip output and colours, the
+captive-portal auto-popup on Android/iOS/Windows, `/scan` behaviour while the AP is up,
+and NVS persistence across a genuine power cycle (only a page reload was tested).
+
+### 17.8 Build command
 
 ```powershell
 & "C:\Users\schte\AppData\Local\Programs\Arduino IDE\resources\app\lib\backend\resources\arduino-cli.exe" compile --clean --fqbn esp32:esp32:esp32 --warnings all "C:\Users\schte\Documents\Arduino\TideTime\TideTime"

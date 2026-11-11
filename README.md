@@ -73,12 +73,50 @@ All settings are stored in NVS (flash) and survive a power cycle.
 
 ## Timezone configuration
 
-The offsets are **minutes from UTC** — e.g. `0` for GMT, `60` for BST, `-300` for EST,
-`330` for IST. This maps directly onto the underlying NTP library's parameters and avoids
-ambiguity.
+Pick your country or region from the **Time zone** dropdown. The device has a built-in
+table of ~60 common zones; choosing one fills in the UTC offset and the daylight saving
+rules automatically, and the summary line underneath shows what was applied:
 
-The day-of-week for both DST transitions is fixed to **Sunday**, matching the behaviour
-of the original sketch. (UK and EU rules are all "last Sunday in March / October".)
+```
+UTC+0 (GMT / BST, daylight saving to UTC+1)
+```
+
+If your zone isn't listed, open **"Advanced - set the offset and daylight saving rules
+manually"** and enter the values yourself. The dropdown then switches to "Custom".
+
+### Why a dropdown rather than IANA names
+
+The ESP32 ships no timezone database, so names like `Europe/London` cannot be resolved —
+the C library needs either a zoneinfo file on the filesystem or a POSIX `TZ` string, and
+neither is available on the device. The NTP library used here also ignores POSIX `TZ`
+strings entirely: it computes the UTC offset from its own rule parameters.
+
+So the device ships its own table, mapping a friendly name to the values the clock
+actually uses: the standard and daylight UTC offsets, and the month/week/hour at which
+each starts.
+
+**Note on the offsets:** they are **minutes from UTC** — `0` for GMT, `60` for BST,
+`-300` for EST, `330` for IST. This maps directly onto the underlying NTP library's
+parameters and avoids ambiguity.
+
+**Note on the day of week:** both daylight saving transitions use **Sunday**, matching
+the behaviour of the original sketch. (UK and EU rules are all "last Sunday in March /
+October", and the US rule is "2nd Sunday in March / 1st Sunday in November", so Sunday
+is correct for all of them.)
+
+### Rules used by the built-in zones
+
+| Region | Daylight starts | Standard resumes |
+|---|---|---|
+| UK, Ireland, Portugal | last Sunday in March, 01:00 | last Sunday in October, 02:00 |
+| Central Europe (CET) | last Sunday in March, 01:00 | last Sunday in October, 02:00 |
+| Eastern Europe (EET) | last Sunday in March, 01:00 | last Sunday in October, 02:00 |
+| USA, Canada | 2nd Sunday in March, 02:00 | 1st Sunday in November, 02:00 |
+| Australia | 1st Sunday in October, 02:00 | 1st Sunday in April, 03:00 |
+| New Zealand | last Sunday in September, 02:00 | 1st Sunday in April, 03:00 |
+
+The "last Sunday" rules are handled correctly by the NTP library in both 4-Sunday and
+5-Sunday months — verified against the device for 2026–2028.
 
 ---
 
@@ -128,6 +166,7 @@ comfortable extra space. Alternatively `No FS 4MB (2MB APP x2)` gives 2 MB.
 | `Config.h/.cpp` | Settings struct + NVS (`Preferences`) persistence |
 | `Palette.h/.cpp` | Runtime gradient palette (`CRGBPalette256`) |
 | `Provisioning.h/.cpp` | AP bring-up, captive-portal DNS, WiFi connect state machine, timezone rules |
+| `TimeZones.h/.cpp` | Built-in table of common timezones (offset + DST rules) |
 | `WebUi.h/.cpp` | HTTP routes, handlers, HTML/CSS/JS |
 
 ### Operating modes

@@ -26,6 +26,7 @@
 #include "Config.h"
 #include "Palette.h"
 #include "Provisioning.h"
+#include "TimeZones.h"
 
 // Defined in TideTime.ino.
 extern CRGB leds[MAX_LEDS];
@@ -330,41 +331,47 @@ fieldset{border:0;margin:0;padding:0}
 <input type="range" id="brightness" name="brightness" min="0" max="255" value="%BRIGHTNESS%">
 
 <h2>Timezone</h2>
-<label><input type="checkbox" name="tzHasDst" id="tzHasDst" %TZHASDST_CHECKED%> Use daylight saving time (DST)</label>
-<p class="note">Offsets are <b>minutes from UTC</b> (absolute, not a difference): 0 = GMT/UTC, 60 = UTC+1 (BST), -300 = UTC-5 (EST).</p>
-<div class="row">
- <label>Standard name<input type="text" name="tzStdName" maxlength="5" size="7" value="%TZSTDNAME%"></label>
- <label>Daylight name<input type="text" name="tzDstName" maxlength="5" size="7" value="%TZDSTNAME%"></label>
-</div>
-<div class="row">
- <label>Standard offset (min from UTC)<input type="number" name="tzStdOffset" min="-720" max="840" value="%TZSTDOFFSET%"></label>
- <label>Daylight offset (min from UTC)<input type="number" name="tzDstOffset" min="-720" max="840" value="%TZDSTOFFSET%"></label>
-</div>
-<div class="inline">DST starts:
- <select name="tzDstMonth" id="tzDstMonth">
-  <option value="0">January</option><option value="1">February</option><option value="2">March</option>
-  <option value="3">April</option><option value="4">May</option><option value="5">June</option>
-  <option value="6">July</option><option value="7">August</option><option value="8">September</option>
-  <option value="9">October</option><option value="10">November</option><option value="11">December</option>
- </select>
- <select name="tzDstWeek" id="tzDstWeek">
-  <option value="0">Last</option><option value="1">First</option><option value="2">Second</option>
-  <option value="3">Third</option><option value="4">Fourth</option>
- </select>
- Sunday at hour <input type="number" name="tzDstHour" min="0" max="23" value="%DH%"></div>
-<div class="inline">Standard time (DST ends) starts:
- <select name="tzStdMonth" id="tzStdMonth">
-  <option value="0">January</option><option value="1">February</option><option value="2">March</option>
-  <option value="3">April</option><option value="4">May</option><option value="5">June</option>
-  <option value="6">July</option><option value="7">August</option><option value="8">September</option>
-  <option value="9">October</option><option value="10">November</option><option value="11">December</option>
- </select>
- <select name="tzStdWeek" id="tzStdWeek">
-  <option value="0">Last</option><option value="1">First</option><option value="2">Second</option>
-  <option value="3">Third</option><option value="4">Fourth</option>
- </select>
- Sunday at hour <input type="number" name="tzStdHour" min="0" max="23" value="%SH%"></div>
-<p class="note">Rules switch on the given Sunday of the month (Last = 0, First = 1, ...). Both rules use Sunday, matching the clock's behaviour.</p>
+<label for="tzZone">Time zone</label>
+<select id="tzZone" name="tzZone"></select>
+<p class="note" id="tzSummary"></p>
+<details id="tzAdvanced">
+ <summary>Advanced - set the offset and daylight saving rules manually</summary>
+ <label><input type="checkbox" name="tzHasDst" id="tzHasDst" %TZHASDST_CHECKED%> Use daylight saving time (DST)</label>
+ <p class="note">Offsets are <b>minutes from UTC</b> (absolute, not a difference): 0 = GMT/UTC, 60 = UTC+1 (BST), -300 = UTC-5 (EST).</p>
+ <div class="row">
+  <label>Standard name<input type="text" id="tzStdName" name="tzStdName" maxlength="5" size="7" value="%TZSTDNAME%"></label>
+  <label>Daylight name<input type="text" id="tzDstName" name="tzDstName" maxlength="5" size="7" value="%TZDSTNAME%"></label>
+ </div>
+ <div class="row">
+  <label>Standard offset (min from UTC)<input type="number" id="tzStdOffset" name="tzStdOffset" min="-720" max="840" value="%TZSTDOFFSET%"></label>
+  <label>Daylight offset (min from UTC)<input type="number" id="tzDstOffset" name="tzDstOffset" min="-720" max="840" value="%TZDSTOFFSET%"></label>
+ </div>
+ <div class="inline">DST starts:
+  <select name="tzDstMonth" id="tzDstMonth">
+   <option value="0">January</option><option value="1">February</option><option value="2">March</option>
+   <option value="3">April</option><option value="4">May</option><option value="5">June</option>
+   <option value="6">July</option><option value="7">August</option><option value="8">September</option>
+   <option value="9">October</option><option value="10">November</option><option value="11">December</option>
+  </select>
+  <select name="tzDstWeek" id="tzDstWeek">
+   <option value="0">Last</option><option value="1">First</option><option value="2">Second</option>
+   <option value="3">Third</option><option value="4">Fourth</option>
+  </select>
+  Sunday at hour <input type="number" id="tzDstHour" name="tzDstHour" min="0" max="23" value="%DH%"></div>
+ <div class="inline">Standard time (DST ends) starts:
+  <select name="tzStdMonth" id="tzStdMonth">
+   <option value="0">January</option><option value="1">February</option><option value="2">March</option>
+   <option value="3">April</option><option value="4">May</option><option value="5">June</option>
+   <option value="6">July</option><option value="7">August</option><option value="8">September</option>
+   <option value="9">October</option><option value="10">November</option><option value="11">December</option>
+  </select>
+  <select name="tzStdWeek" id="tzStdWeek">
+   <option value="0">Last</option><option value="1">First</option><option value="2">Second</option>
+   <option value="3">Third</option><option value="4">Fourth</option>
+  </select>
+  Sunday at hour <input type="number" id="tzStdHour" name="tzStdHour" min="0" max="23" value="%SH%"></div>
+ <p class="note">Rules switch on the given Sunday of the month (Last = 0, First = 1, ...). Both rules use Sunday, matching the clock's behaviour.</p>
+</details>
 
 <h2>Tide station</h2>
 <label>EasyTide station ID<input type="text" name="stationId" maxlength="32" value="%STATION_ID%"></label>
@@ -376,15 +383,118 @@ fieldset{border:0;margin:0;padding:0}
 <button type="submit" class="danger">Factory reset</button>
 </form>
 <script>
-var sel={dm:%DM%,dw:%DW%,dh:%DH%,sm:%SM%,sw:%SW%,sh:%SH%};
-document.getElementById('tzDstMonth').value=sel.dm;
-document.getElementById('tzDstWeek').value=sel.dw;
-document.getElementById('tzDstHour').value=sel.dh;
-document.getElementById('tzStdMonth').value=sel.sm;
-document.getElementById('tzStdWeek').value=sel.sw;
-document.getElementById('tzStdHour').value=sel.sh;
-var preview=document.getElementById('preview');
 function $(id){return document.getElementById(id);}
+var sel={dm:%DM%,dw:%DW%,dh:%DH%,sm:%SM%,sw:%SW%,sh:%SH%};
+(function(){
+ var s=function(id,v){var e=document.getElementById(id);if(e){e.value=v;}};
+ s('tzDstMonth',sel.dm);s('tzDstWeek',sel.dw);s('tzDstHour',sel.dh);
+ s('tzStdMonth',sel.sm);s('tzStdWeek',sel.sw);s('tzStdHour',sel.sh);
+})();
+// ---- Timezone picker -------------------------------------------------
+// The zone table is served by the device as JSON (see /admin GET). Each entry
+// carries the offsets and DST rules the clock actually uses, so choosing a
+// zone fills in every field below it.
+var TZ=[];
+var tzSel=document.getElementById('tzZone');
+var tzSummary=document.getElementById('tzSummary');
+var tzAdvanced=document.getElementById('tzAdvanced');
+function fmtOffset(m){
+ var sign=m<0?'-':'+';
+ var a=Math.abs(m);
+ var h=Math.floor(a/60),mm=a%60;
+ return 'UTC'+sign+h+(mm?(':'+(mm<10?'0':'')+mm):'');
+}
+function applyZone(z){
+ var s=function(id,v){var e=$(id);if(e){e.value=v;}};
+ s('tzStdName',z.stdName);
+ s('tzDstName',z.dstName);
+ s('tzStdOffset',z.stdOffset);
+ s('tzDstOffset',z.dstOffset);
+ if($('tzHasDst')){$('tzHasDst').checked=!!z.hasDst;}
+ s('tzDstMonth',z.dstMonth);
+ s('tzDstWeek',z.dstWeek);
+ s('tzDstHour',z.dstHour);
+ s('tzStdMonth',z.stdMonth);
+ s('tzStdWeek',z.stdWeek);
+ s('tzStdHour',z.stdHour);
+ updateTzSummary();
+}
+function currentSettings(){
+ var g=function(id,def){var e=$(id);return e?e.value:def;};
+ return {
+  stdName:g('tzStdName',''),dstName:g('tzDstName',''),
+  stdOffset:Number(g('tzStdOffset',0)),dstOffset:Number(g('tzDstOffset',0)),
+  hasDst:$('tzHasDst')&&$('tzHasDst').checked?1:0,
+  dstMonth:Number(g('tzDstMonth',0)),dstWeek:Number(g('tzDstWeek',0)),dstHour:Number(g('tzDstHour',0)),
+  stdMonth:Number(g('tzStdMonth',0)),stdWeek:Number(g('tzStdWeek',0)),stdHour:Number(g('tzStdHour',0))
+ };
+}
+function updateTzSummary(){
+ var c=currentSettings();
+ var txt=fmtOffset(c.stdOffset);
+ if(c.hasDst){txt+=' ('+c.stdName+' / '+c.dstName+', daylight saving to '+fmtOffset(c.dstOffset)+')';}
+ else{txt+=' ('+c.stdName+', no daylight saving)';}
+ // Until the zone list has loaded there is nothing to match against, so just
+ // show the summary and leave the dropdown alone.
+ if(!TZ.length){tzSummary.textContent=txt;return;}
+ // Mark the dropdown as "custom" when the values do not match a known zone.
+ var match=-1;
+ for(var i=0;i<TZ.length;i++){
+  var z=TZ[i];
+  if(z.stdOffset===c.stdOffset&&z.dstOffset===c.dstOffset&&z.hasDst===c.hasDst&&
+     z.dstMonth===c.dstMonth&&z.dstWeek===c.dstWeek&&z.dstHour===c.dstHour&&
+     z.stdMonth===c.stdMonth&&z.stdWeek===c.stdWeek&&z.stdHour===c.stdHour&&
+     z.stdName===c.stdName&&z.dstName===c.dstName){match=i;break;}
+ }
+ if(match<0){
+  // Add the "custom" option only if it is not already present, otherwise
+  // repeated edits would append duplicates.
+  var haveCustom=false;
+  for(var k=0;k<tzSel.options.length;k++){
+   if(tzSel.options[k].value==='custom'){haveCustom=true;break;}
+  }
+  if(!haveCustom){
+   var o=document.createElement('option');
+   o.value='custom';o.textContent='Custom (see advanced settings below)';
+   tzSel.appendChild(o);
+  }
+  tzSel.value='custom';
+ }else{
+  tzSel.value=String(match);
+ }
+ tzSummary.textContent=txt;
+}
+tzSel.addEventListener('change',function(){
+ if(this.value==='custom'){
+  tzAdvanced.open=true;
+  updateTzSummary();
+  return;
+ }
+ var z=TZ[Number(this.value)];
+ if(z){applyZone(z);tzAdvanced.open=false;}
+});
+// Any manual change in the advanced panel switches the dropdown to "Custom".
+['tzStdName','tzDstName','tzStdOffset','tzDstOffset','tzHasDst','tzDstMonth','tzDstWeek','tzDstHour','tzStdMonth','tzStdWeek','tzStdHour'].forEach(function(id){
+ var e=$(id);
+ if(!e){return;}
+ e.addEventListener('change',updateTzSummary);
+ e.addEventListener('input',updateTzSummary);
+});
+fetch('/admin/tz').then(function(r){return r.json();}).then(function(list){
+ TZ=list;
+ var custom=document.createElement('option');
+ custom.value='custom';custom.textContent='Custom (see advanced settings below)';
+ tzSel.appendChild(custom);
+ for(var i=0;i<TZ.length;i++){
+  var o=document.createElement('option');
+  o.value=String(i);o.textContent=TZ[i].name;
+  tzSel.appendChild(o);
+ }
+ updateTzSummary();
+}).catch(function(){
+ tzSummary.textContent='Could not load the time zone list.';
+});
+var preview=document.getElementById('preview');
 function hex2(n){n=Number(n)&255;return (n<16?'0':'')+n.toString(16);}
 function rgbToHex(r,g,b){return '#'+hex2(r)+hex2(g)+hex2(b);}
 function hexToRgb(h){h=String(h||'').replace('#','');if(h.length<6)return [0,0,0];return [parseInt(h.substr(0,2),16)||0,parseInt(h.substr(2,2),16)||0,parseInt(h.substr(4,2),16)||0];}
@@ -600,6 +710,49 @@ static void handleStatus() {
   server.send(200, "application/json", json);
 }
 
+// Serve the built-in timezone table as JSON so the admin page can populate
+// its dropdown and fill in the offsets / DST rules for the chosen zone.
+static void handleTimeZones() {
+  String json = "[";
+  const uint8_t n = timeZoneCount();
+  for (uint8_t i = 0; i < n; ++i) {
+    const TimeZoneEntry* z = timeZoneAt(i);
+    if (!z) {
+      continue;
+    }
+    if (i > 0) {
+      json += ",";
+    }
+    json += "{\"name\":\"";
+    json += jsonEscape(z->name);
+    json += "\",\"stdName\":\"";
+    json += jsonEscape(z->stdName);
+    json += "\",\"dstName\":\"";
+    json += jsonEscape(z->dstName);
+    json += "\",\"stdOffset\":";
+    json += String((int)z->stdOffset);
+    json += ",\"dstOffset\":";
+    json += String((int)z->dstOffset);
+    json += ",\"hasDst\":";
+    json += z->hasDst ? "1" : "0";
+    json += ",\"dstMonth\":";
+    json += String((unsigned)z->dstMonth);
+    json += ",\"dstWeek\":";
+    json += String((unsigned)z->dstWeek);
+    json += ",\"dstHour\":";
+    json += String((unsigned)z->dstHour);
+    json += ",\"stdMonth\":";
+    json += String((unsigned)z->stdMonth);
+    json += ",\"stdWeek\":";
+    json += String((unsigned)z->stdWeek);
+    json += ",\"stdHour\":";
+    json += String((unsigned)z->stdHour);
+    json += "}";
+  }
+  json += "]";
+  server.send(200, "application/json", json);
+}
+
 static void handleAdminGet() {
   String html = ADMIN_HTML;  // ESP32: PROGMEM is memory-mapped, direct read is safe
 
@@ -669,23 +822,57 @@ void handleAdminSave() {
     stops[j + 1] = key;
   }
 
-  const bool newHasDst = server.hasArg("tzHasDst");  // unchecked checkbox sends nothing
+  // ---- Timezone ----
+  //
+  // A zone index was chosen in the dropdown: use the built-in table's values
+  // and ignore the advanced fields. "custom" (or a missing/invalid index)
+  // means the user edited the advanced fields, so use those instead.
+  const String zoneArg = server.arg("tzZone");
+  const TimeZoneEntry* zone = nullptr;
+  if (zoneArg.length() > 0 && zoneArg != "custom") {
+    const long zi = parseLongArg(zoneArg);
+    if (zi >= 0 && zi < (long)timeZoneCount()) {
+      zone = timeZoneAt((uint8_t)zi);
+    }
+  }
 
-  String stdName = server.arg("tzStdName");
-  String dstName = server.arg("tzDstName");
-  truncateTo5(stdName);
-  truncateTo5(dstName);
+  bool newHasDst;
+  String stdName;
+  String dstName;
+  int16_t newStdOffset;
+  int16_t newDstOffset;
+  uint8_t newDstMonth, newDstWeek, newDstHour;
+  uint8_t newStdMonth, newStdWeek, newStdHour;
 
-  const int16_t newStdOffset =
-      (int16_t)clampLong(parseLongArg(server.arg("tzStdOffset")), -720, 840);
-  const int16_t newDstOffset =
-      (int16_t)clampLong(parseLongArg(server.arg("tzDstOffset")), -720, 840);
-  const uint8_t newDstMonth = (uint8_t)clampLong(parseLongArg(server.arg("tzDstMonth")), 0, 11);
-  const uint8_t newDstWeek  = (uint8_t)clampLong(parseLongArg(server.arg("tzDstWeek")), 0, 4);
-  const uint8_t newDstHour  = (uint8_t)clampLong(parseLongArg(server.arg("tzDstHour")), 0, 23);
-  const uint8_t newStdMonth = (uint8_t)clampLong(parseLongArg(server.arg("tzStdMonth")), 0, 11);
-  const uint8_t newStdWeek  = (uint8_t)clampLong(parseLongArg(server.arg("tzStdWeek")), 0, 4);
-  const uint8_t newStdHour  = (uint8_t)clampLong(parseLongArg(server.arg("tzStdHour")), 0, 23);
+  if (zone) {
+    newHasDst    = zone->hasDst != 0;
+    stdName      = zone->stdName;
+    dstName      = zone->dstName;
+    newStdOffset = zone->stdOffset;
+    newDstOffset = zone->dstOffset;
+    newDstMonth  = zone->dstMonth;
+    newDstWeek   = zone->dstWeek;
+    newDstHour   = zone->dstHour;
+    newStdMonth  = zone->stdMonth;
+    newStdWeek   = zone->stdWeek;
+    newStdHour   = zone->stdHour;
+  } else {
+    newHasDst = server.hasArg("tzHasDst");  // unchecked checkbox sends nothing
+    stdName = server.arg("tzStdName");
+    dstName = server.arg("tzDstName");
+    truncateTo5(stdName);
+    truncateTo5(dstName);
+    newStdOffset =
+        (int16_t)clampLong(parseLongArg(server.arg("tzStdOffset")), -720, 840);
+    newDstOffset =
+        (int16_t)clampLong(parseLongArg(server.arg("tzDstOffset")), -720, 840);
+    newDstMonth = (uint8_t)clampLong(parseLongArg(server.arg("tzDstMonth")), 0, 11);
+    newDstWeek  = (uint8_t)clampLong(parseLongArg(server.arg("tzDstWeek")), 0, 4);
+    newDstHour  = (uint8_t)clampLong(parseLongArg(server.arg("tzDstHour")), 0, 23);
+    newStdMonth = (uint8_t)clampLong(parseLongArg(server.arg("tzStdMonth")), 0, 11);
+    newStdWeek  = (uint8_t)clampLong(parseLongArg(server.arg("tzStdWeek")), 0, 4);
+    newStdHour  = (uint8_t)clampLong(parseLongArg(server.arg("tzStdHour")), 0, 23);
+  }
 
   // ---- Commit to config + NVS ----
 
@@ -791,6 +978,7 @@ void setupRoutes() {
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/admin", HTTP_GET, handleAdminGet);
   server.on("/admin", HTTP_POST, handleAdminSave);
+  server.on("/admin/tz", HTTP_GET, handleTimeZones);
   server.on("/factory-reset", HTTP_POST, handleFactoryReset);
   server.on("/favicon.ico", HTTP_GET, handleFavicon);
 
