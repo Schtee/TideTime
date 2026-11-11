@@ -469,6 +469,17 @@ static void redirect(const char* location) {
   server.send(302, "text/plain", "");
 }
 
+// True once the device is actually on the user's network.
+//
+// The mode alone is not enough: after a successful connect the device stays in
+// MODE_CONNECT_STA for the AP grace period (60 s) so the setup page can still
+// be polled, and during that window a browser's captive-portal probe would
+// otherwise bounce the user back to /setup. The WiFi status is the real
+// signal that the device has a working connection to the home network.
+static bool isOnHomeNetwork() {
+  return (WiFi.status() == WL_CONNECTED) && !config.ssid.isEmpty();
+}
+
 static const char* modeName() {
   switch (deviceMode) {
     case MODE_SETUP_AP:   return "SETUP_AP";
@@ -482,14 +493,20 @@ static const char* modeName() {
 // ---------------------------------------------------------------------------
 
 static void handleRoot() {
-  if (deviceMode != MODE_RUNNING) {
-    redirect("/setup");
-  } else {
+  if (isOnHomeNetwork()) {
     redirect("/admin");
+  } else {
+    redirect("/setup");
   }
 }
 
 static void handleSetupGet() {
+  // Once the device has joined the home network the setup page is not the
+  // right destination - send the user to the admin panel instead.
+  if (isOnHomeNetwork()) {
+    redirect("/admin");
+    return;
+  }
   server.send_P(200, "text/html", SETUP_HTML);
 }
 
@@ -750,7 +767,16 @@ static void handleFavicon() {
 }
 
 static void handleCaptiveProbe() {
-  redirect("/setup");
+  // Captive-portal probes are only meaningful while the device is running its
+  // own access point. Once it has joined the home network these URLs are hit
+  // by the browser's "am I behind a captive portal?" check - redirecting them
+  // to /setup then would bounce the user to the setup page for no reason.
+  if (isOnHomeNetwork()) {
+    // Let the probe succeed so the browser stops trying and stays where it is.
+    server.send(200, "text/plain", "");
+  } else {
+    redirect("/setup");
+  }
 }
 
 // ---------------------------------------------------------------------------

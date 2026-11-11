@@ -47,6 +47,10 @@ IP address it got. **Note that the access point stays up for 60 seconds after co
 so the page can display the result — after that the AP shuts down and the device is only
 reachable on your LAN.
 
+Once the device is on your network, visiting `/` takes you to the admin panel, and
+`/setup` redirects there too. The setup page only appears while the device is running
+its own access point.
+
 If the connection fails, the device falls back to access point mode and shows the error
 (e.g. "Network not found"). You can correct the details and try again.
 
