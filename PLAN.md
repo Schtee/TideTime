@@ -1,5 +1,11 @@
 # TideTime — Web Admin Panel & WiFi Provisioning: Implementation Plan
 
+> **Historical document.** This plan records the design as it was originally implemented
+> and is kept for reference. The LED layer has since moved from FastLED to Adafruit
+> NeoPixel to cut clean build times from ~290 s to ~160 s — see "Build times" in
+> `README.md`. Where this plan mentions FastLED / `CRGBPalette256` / `lerp8by8`, read
+> it as a description of the approach, not of the current code.
+
 **Target:** ESP32 (arduino-esp32 core), Arduino framework, single sketch folder `TideTime/`.
 **Goal:** Replace hardcoded credentials/config with a persistent settings store and a captive-portal-style web admin panel.
 

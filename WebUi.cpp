@@ -21,15 +21,14 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <Preferences.h>
-#include <FastLED.h>
 
 #include "Config.h"
 #include "Palette.h"
 #include "Provisioning.h"
 #include "TimeZones.h"
 
-// Defined in TideTime.ino.
-extern CRGB leds[MAX_LEDS];
+// Defined in Palette.cpp.
+extern Rgb leds[MAX_LEDS];
 extern volatile bool tideRefetchRequested;
 
 WebServer server(80);
@@ -904,17 +903,16 @@ void handleAdminSave() {
 
   // ---- Apply live, without a reboot ----
 
-  applyPalette(config.palette);
-  FastLED.setBrightness(config.brightness);
-  FastLED.show();
   if (numLedsChanged) {
-    // Blank the whole old range first so shrinking the count cannot leave
-    // stale lit pixels beyond the new end of the strip.
-    FastLED.clear();
-    FastLED.show();
-    FastLED.addLeds<WS2812, 2, GRB>(leds, config.numLeds);
-    FastLED.show();
+    // Resize first: setLedCount() blanks the old range so shrinking the
+    // count cannot leave stale lit pixels beyond the new end of the strip.
+    // Doing it before showLeds() means the strip is never pushed with a
+    // stale pixel count.
+    setLedCount(config.numLeds);
   }
+  applyPalette(config.palette);
+  setLedBrightness(config.brightness);
+  showLeds();
   applyTimezone();
   // Only poke the NTP client if it has actually been started. The admin page
   // is reachable in access-point mode too, where ntp.begin() has not run yet

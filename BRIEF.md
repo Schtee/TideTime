@@ -1,12 +1,18 @@
 # Implementation Brief for Sub-Agents
 
+> **Historical document.** This brief records the design as it was originally implemented
+> and is kept for reference. The LED layer has since moved from FastLED to Adafruit
+> NeoPixel to cut build times — see "Build times" in `README.md`. Where this brief
+> mentions FastLED / `CRGBPalette256` / `lerp8by8`, read it as a description of the
+> approach, not of the current code.
+
 This file is the operational brief for implementing `PLAN.md`. Read `PLAN.md` in the same
 directory first — it is the authoritative specification. This brief adds the
 execution discipline and the exact API contracts that the modules must agree on.
 
 **Target:** Arduino ESP32 sketch, folder `TideTime/`, main file `TideTime.ino`.
-**Toolchain (verified):** Arduino ESP32 core **3.3.11**, FastLED **3.10.3**, ArduinoJson **7.4.3**,
-`sstaub/NTP`.
+**Toolchain (verified):** Arduino ESP32 core **3.3.11**, Adafruit NeoPixel **1.15.5**
+(previously FastLED **3.10.3**), ArduinoJson **7.4.3**, `sstaub/NTP`.
 
 ---
 

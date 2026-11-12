@@ -2,8 +2,8 @@
  * TideTime - tide-height LED strip clock.
  *
  * Phase B rewrite: integrates Config (NVS settings), Palette (runtime
- * CRGBPalette256), Provisioning (AP / captive portal / WiFi connect state
- * machine) and WebUi (WebServer admin panel).
+ * 256-entry gradient palette), Provisioning (AP / captive portal / WiFi
+ * connect state machine) and WebUi (WebServer admin panel).
  *
  * Globals owned here (Provisioning.cpp uses them via extern declarations):
  *   WiFiUDP wifiUdp;
@@ -18,7 +18,6 @@
 #include <WiFiClientSecure.h>
 
 #include <ArduinoJson.h>
-#include <FastLED.h>
 
 #include "NTP.h"
 
@@ -35,9 +34,8 @@
 WiFiUDP wifiUdp;
 NTP ntp(wifiUdp);
 
-// Fixed-size buffer; config.numLeds (1..MAX_LEDS from Config.h) selects how
-// many LEDs are actually driven.
-CRGB leds[MAX_LEDS];
+// The LED buffer itself lives in Palette.cpp; config.numLeds (1..MAX_LEDS
+// from Config.h) selects how many pixels are actually driven.
 
 JsonDocument jsonDoc;
 
@@ -210,13 +208,13 @@ void updateLEDs() {
 
   for (int i = 0; i < numLeds; ++i) {
     if (i == firstSandIndex) {
-      leds[i] = CRGB(255, 0, 0);  // shoreline marker
+      leds[i].r = 255; leds[i].g = 0; leds[i].b = 0;  // shoreline marker
     } else if (i < firstSandIndex) {
       // Sea = palette start (OCEAN with the default palette)...
-      leds[i] = ColorFromPalette(palette, (uint8_t)0);
+      leds[i] = paletteAt(0);
     } else {
       // ...sand = palette end (SAND with the default palette).
-      leds[i] = ColorFromPalette(palette, (uint8_t)255);
+      leds[i] = paletteAt(255);
     }
 #if DEBUG_SERIAL
     Serial.printf("%i: %u %u %u\n", i, (unsigned)leds[i].r, (unsigned)leds[i].g,
@@ -224,7 +222,7 @@ void updateLEDs() {
 #endif
   }
 
-  FastLED.show();
+  showLeds();
 }
 
 void setup() {
@@ -271,10 +269,11 @@ void setup() {
   applyTimezone();
 
   // 3. Runtime gradient palette + LED strip.
-  palette = buildPalette(config.palette);
-  FastLED.addLeds<WS2812, 2, GRB>(leds, config.numLeds);
-  FastLED.setMaxPowerInVoltsAndMilliamps(5, 2500);
-  FastLED.setBrightness(config.brightness);
+  //    setLedCount() first: showLeds() is a no-op until the strip knows how
+  //    many pixels to drive.
+  setLedCount(config.numLeds);
+  setLedBrightness(config.brightness);
+  applyPalette(config.palette);
 
   // 4. Initialise the lwIP stack. This MUST happen before any socket is
   //    created. WebServer::begin() opens a listening socket via

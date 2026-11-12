@@ -142,19 +142,56 @@ arduino-cli upload  --fqbn esp32:esp32:esp32 -p <PORT> "TideTime"
 
 ### Required libraries
 
-- **FastLED** 3.10.3 (Library Manager)
+- **Adafruit NeoPixel** 1.15.x (Library Manager)
 - **ArduinoJson** 7.x (Library Manager)
 - **NTP** by sstaub (Library Manager) — for NTP time sync with timezone/DST rules
 - `WebServer`, `DNSServer` and `Preferences` ship with the ESP32 Arduino core
 
 ### Flash usage
 
-The sketch uses **1,143,308 bytes (87%)** of the default 1.2 MB app partition. There is
-roughly **167 KB of headroom left**.
+The sketch uses **1,145,868 bytes (87%)** of the default 1.2 MB app partition. There is
+roughly **165 KB of headroom left**.
 
 If you need more room, switch the board's partition scheme in the Arduino IDE under
 **Tools → Partition Scheme** — `Minimal SPIFFS (1.9MB APP with OTA/128KB SPIFFS)` gives
 comfortable extra space. Alternatively `No FS 4MB (2MB APP x2)` gives 2 MB.
+
+### Build times
+
+Clean builds of this sketch are dominated by the ESP32 core libraries, not by the sketch
+itself. Measured on an i5-10400 with the ESP32 core 3.3.11:
+
+| Build | Translation units | Time |
+|---|---|---|
+| Clean build | 67 | ~163 s |
+| Rebuild, nothing changed | 1 | ~17 s |
+
+Two things worth knowing:
+
+- **The Arduino build system compiles every `.cpp` file inside a library folder**,
+  whether or not the sketch uses it. This is why the library choice matters so much for
+  build time — see the note below.
+- **`--clean` throws the cache away.** A normal rebuild reuses the cached object files
+  and takes ~17 s; only a forced clean build pays the full cost.
+
+The remaining ~145 s is the ESP32 core itself (WiFi, WebServer, HTTPClient, TLS, FS …),
+compiled serially. The ESP32 platform recipe does not parallelise, so `arduino-cli`'s
+`-j` flag makes no difference for this board.
+
+#### Why the sketch uses Adafruit NeoPixel rather than FastLED
+
+The sketch previously used **FastLED** for a very small surface area: `addLeds`, `show`,
+`setBrightness`, `clear`, `ColorFromPalette` and `CRGB`. FastLED is a monolith, and the
+Arduino build system compiles all **136** of its translation units — including the 58
+effect files under `src/fl/` (`blur`, `wave_simulation`, `xypath_renderer`, …) that this
+project never touches. FastLED alone accounted for **243 s of a 288 s clean build**.
+
+Swapping to **Adafruit NeoPixel** (2 translation units) for the same job cut the clean
+build from **288 s to 163 s** — a 43% saving — and actually reduced flash usage slightly.
+
+The gradient palette is reproduced exactly: `Palette.cpp` uses the same interpolation
+arithmetic FastLED's `lerp8by8()` used (`a + ((b - a) * frac) >> 8`), so the rendered
+colours are bit-identical to the FastLED version.
 
 ---
 
@@ -164,7 +201,7 @@ comfortable extra space. Alternatively `No FS 4MB (2MB APP x2)` gives 2 MB.
 |---|---|
 | `TideTime.ino` | `setup()`/`loop()`, tide fetch, LED rendering |
 | `Config.h/.cpp` | Settings struct + NVS (`Preferences`) persistence |
-| `Palette.h/.cpp` | Runtime gradient palette (`CRGBPalette256`) |
+| `Palette.h/.cpp` | Runtime gradient palette (256 entries) + LED strip driver |
 | `Provisioning.h/.cpp` | AP bring-up, captive-portal DNS, WiFi connect state machine, timezone rules |
 | `TimeZones.h/.cpp` | Built-in table of common timezones (offset + DST rules) |
 | `WebUi.h/.cpp` | HTTP routes, handlers, HTML/CSS/JS |
@@ -183,8 +220,10 @@ BOOT ──no saved wifi──► SETUP_AP ──credentials──► CONNECT_ST
 
 ### Notes on the codebase
 
-- The gradient palette is built at runtime into a `CRGBPalette256` (256 entries), so
-  palette colours and stop positions are user-configurable.
+- The gradient palette is built at runtime into a 256-entry lookup table, so palette
+  colours and stop positions are user-configurable.
+- The LED strip is driven by Adafruit NeoPixel rather than FastLED — see
+  [Build times](#build-times) for why.
 - `parse8601()` deliberately avoids `std::chrono::parse` / iostreams — they cost ~237 KB
   of flash, which overflows the default app partition. It uses `sscanf` plus header-only
   `std::chrono` calendar arithmetic instead.
