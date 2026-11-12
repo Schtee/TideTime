@@ -184,7 +184,14 @@ void applyTimezone() {
   // Offsets are ABSOLUTE minutes from UTC. timeZone() needs signed
   // hours/minutes, so use signed division: -300 -> -5 hours, 0 minutes.
   if (!config.tzHasDst) {
-    ntp.timeZone((int8_t)(config.tzStdOffset / 60), (int8_t)(config.tzStdOffset % 60));
+    // timeZone() expects the minutes as a magnitude: for negative hours it
+    // subtracts them, so -305 min must be passed as (-5, 5), not (-5, -5).
+    const int stdHours = config.tzStdOffset / 60;
+    int stdMinutes = config.tzStdOffset % 60;
+    if (stdMinutes < 0) {
+      stdMinutes = -stdMinutes;
+    }
+    ntp.timeZone((int8_t)stdHours, (int8_t)stdMinutes);
     ntp.isDST(false);
   } else {
     // The day-of-week is fixed to Sunday (matches the original sketch and

@@ -165,10 +165,10 @@ All keys ≤ 15 characters.
 | `tzDstOffset` | Int | `60` | Minutes from UTC for daylight saving time |
 | `tzHasDst` | Bool | `true` | Whether DST rules apply at all |
 | `tzDstMonth` | UChar | `2` (Mar) | 0–11, matches NTP lib `month_t` enum |
-| `tzDstWeek` | UChar | `4` (Last) | 0–4, matches `week_t` enum |
+| `tzDstWeek` | UChar | `0` (Last) | 0–4, matches `week_t` enum |
 | `tzDstHour` | UChar | `1` | Hour of day DST starts |
 | `tzStdMonth` | UChar | `9` (Oct) | 0–11 |
-| `tzStdWeek` | UChar | `4` (Last) | 0–4 |
+| `tzStdWeek` | UChar | `0` (Last) | 0–4 |
 | `tzStdHour` | UChar | `2` | Hour of day STD starts |
 | `cfgVersion` | UShort | `1` | Schema version. Bump when adding keys; on mismatch, write defaults for missing keys but keep user values. |
 

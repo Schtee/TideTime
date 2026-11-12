@@ -53,10 +53,10 @@ void Config::load() {
     tzStdOffset = 0;
     tzDstOffset = 60;
     tzDstMonth = 2;   // Mar
-    tzDstWeek = 4;    // Last
+    tzDstWeek = 0;    // Last (week_t: Last=0)
     tzDstHour = 1;
     tzStdMonth = 9;   // Oct
-    tzStdWeek = 4;    // Last
+    tzStdWeek = 0;    // Last (week_t: Last=0)
     tzStdHour = 2;
     return;
   }
@@ -99,10 +99,10 @@ void Config::load() {
   tzStdOffset  = prefs.getShort("tzStdOffset", 0);
   tzDstOffset  = prefs.getShort("tzDstOffset", 60);
   tzDstMonth   = prefs.getUChar("tzDstMonth", 2);
-  tzDstWeek    = prefs.getUChar("tzDstWeek", 4);
+  tzDstWeek    = prefs.getUChar("tzDstWeek", 0);
   tzDstHour    = prefs.getUChar("tzDstHour", 1);
   tzStdMonth   = prefs.getUChar("tzStdMonth", 9);
-  tzStdWeek    = prefs.getUChar("tzStdWeek", 4);
+  tzStdWeek    = prefs.getUChar("tzStdWeek", 0);
   tzStdHour    = prefs.getUChar("tzStdHour", 2);
 
   // Flush and release the namespace.

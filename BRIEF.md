@@ -163,8 +163,8 @@ All ≤ 15 characters. Namespace `tidetime`.
 **Defaults:** `ssid=""`, `psk=""`, `stationId="0546"`, `numLeds=48`, `brightness=255`,
 palette stops = OCEAN(31,255,160)@0, CYAN(0,200,255)@85, YELLOW(255,220,80)@170, SAND(255,100,0)@255,
 `tzStdName="GMT"`, `tzDstName="BST"`, `tzStdOffset=0`, `tzDstOffset=60`, `tzHasDst=true`,
-`tzDstMonth=2` (Mar), `tzDstWeek=4` (Last), `tzDstHour=1`,
-`tzStdMonth=9` (Oct), `tzStdWeek=4` (Last), `tzStdHour=2`, `cfgVersion=1`.
+`tzDstMonth=2` (Mar), `tzDstWeek=0` (Last), `tzDstHour=1`,
+`tzStdMonth=9` (Oct), `tzStdWeek=0` (Last), `tzStdHour=2`, `cfgVersion=1`.
 
 **Clamps on load:** `numLeds` → 1..300, `brightness` → 0..255, palette `pos` → 0..255,
 `tz*Offset` → -720..840, `tz*Month` → 0..11, `tz*Week` → 0..4, `tz*Hour` → 0..23.
